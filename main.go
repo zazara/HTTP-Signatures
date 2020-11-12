@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"io/ioutil"
@@ -11,6 +12,9 @@ import (
 	"net/http/httputil"
 	"os"
 	"time"
+
+	"github.com/gin-gonic/gin"
+	_ "github.com/jinzhu/gorm/dialects/mysql"
 )
 
 func HttpSignaturesFormat(verb, path, host string) string {
@@ -65,4 +69,30 @@ func main() {
 	if err := ioutil.WriteFile("public.pem", pubbyte, os.ModePerm); err != nil {
 		panic(err)
 	}
+
+	router := gin.Default()
+
+	router.GET("/test", func(ctx *gin.Context) {
+		file, err := ioutil.ReadFile("src/static/test.json")
+		accept := ctx.GetHeader("accept")
+		if accept == "application/activity+json" {
+			var response interface{}
+			if err == nil {
+				json.Unmarshal(file, &response)
+				fmt.Println(response)
+			}
+			ctx.Data(200, "application/activity+json", file)
+		} else {
+			ctx.HTML(302, "profile.html", gin.H{})
+		}
+	})
+
+	router.GET("/.well-known/host-meta", func(ctx *gin.Context) {
+		file, err := ioutil.ReadFile("src/.well-known/host-meta")
+		if err == nil {
+			ctx.Data(200, "application/xml", file)
+		}
+	})
+
+	router.Run(":5000")
 }
