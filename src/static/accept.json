@@ -1,0 +1,8 @@
+{
+    "@context": "https://www.w3.org/ns/activitystreams",
+    "type": "Accept",
+    "actor": "https://actub.hatawaku.xyz/users/test", 
+    "object": {
+        # FollowアクティビティのJSON
+    }
+}
