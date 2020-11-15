@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
@@ -12,8 +13,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"net/http/httputil"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -41,35 +42,80 @@ type followed struct {
 	Acotr string `json:"actor"`
 }
 
+func newSignRequest(host, verb, path string, body interface{}) *http.Request {
+	bodyJSON, _ := json.Marshal(body)
+	req, _ := http.NewRequest(strings.ToUpper(verb), "https://"+host+path, bytes.NewBuffer(bodyJSON))
+	date := time.Now().Format("02 Jan 2006 15:04:05")
+	header_str := fmt.Sprintf("(request-target): %s %s\nhost: %s\ndate: %s GMT", verb, path, host, date)
+	ran := rand.Reader
+	rsaPrivateKey, _ := rsa.GenerateKey(ran, 2048)
+	hasher := sha256.New()
+	hasher.Write([]byte(header_str))
+	tokenHash := hasher.Sum(nil)
+	signed_byte, _ := rsa.SignPSS(ran, rsaPrivateKey, crypto.SHA256, tokenHash, nil)
+
+	encoded_str := base64.StdEncoding.EncodeToString(signed_byte)
+
+	signed_header := fmt.Sprintf("keyId=\"%s\",headers=\"(request-target) host date\",signature=\"%s\"", "https://actub.hatawaku.xyz/users/test#main-key", encoded_str)
+	req.Header.Set("Signature", signed_header)
+	return req
+}
+
+type icon struct {
+	Type string `json:"type"`
+	URL  string `json:"url"`
+}
+
+type publicKey struct {
+	Id           string `json:"id"`
+	Owner        string `json:"owner"`
+	PublicKeyPem string `json:"publicKeyPem"`
+}
+
+type user struct {
+	Context           string `json:"@context"`
+	Type              string `json:"type"`
+	Id                string `json:"id"`
+	Name              string `json:"name"`
+	PreferredUsername string `json:"preferredUsername"`
+	Summary           string `json:"summary"`
+	Inbox             string `json:"inbox"`
+	Outbox            string `json:"outbox"`
+	Icon              icon   `json:"icon"`
+}
+
+func newUserStruct(userId string) user {
+	siteURL := "https://actub.hatawaku.xyz/"
+	userURL := siteURL + "users/" + userId
+	newUser := user{}
+	newUser.Context = "https://www.w3.org/ns/activitystreams"
+	newUser.Type = "Person"
+	newUser.Id = userURL
+	newUser.Name = userId
+	newUser.PreferredUsername = userId
+	newUser.Summary = userId + "'s summary"
+	newUser.Inbox = userURL + "/inbox"
+	newUser.Outbox = userURL + "/outbox"
+	newIcon := icon{Type: "Image", URL: "https://actub.hatawaku.xyz/media/test"}
+	newUser.Icon = newIcon
+	return newUser
+}
+
 func main() {
 	url := "https://mstdn.jp"
 	req, _ := http.NewRequest("POST", url, nil)
 	req.Header.Set("Authorization", "Bearer access-token")
 
-	dump, _ := httputil.DumpRequestOut(req, true)
-	fmt.Printf("%s", dump)
 	host := "mstdn.jp"
 	verb := "get"
 	path := "/users/lain/inbox"
 	date := time.Now().Format("02 Jan 2006 15:04:05")
 	header_str := fmt.Sprintf("(request-target): %s %s\nhost: %s\ndate: %s GMT", verb, path, host, date)
-	// fmt.Println(header_str)
-
-	// key, _ := openssl.GenerateRSAKey(1024)
-	// pem, _ := key.MarshalPKCS1PrivateKeyPEM()
-	// fmt.Println(string(pem))
-
-	// cert, _ := openssl.LoadCertificateFromPEM(pem)
-	// pub, _ := cert.PublicKey()
-	// pub_pem, _ := pub.MarshalPKIXPublicKeyPEM()
-	// fmt.Println(string(pub_pem))
 	ran := rand.Reader
 	rsaPrivateKey, _ := rsa.GenerateKey(ran, 2048)
 	rsaPublicKey := rsaPrivateKey.Public()
-	// fmt.Println(rsaPublicKey)
 	derPrivateKey, _ := x509.MarshalPKCS8PrivateKey(rsaPrivateKey)
 	privbyte := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: derPrivateKey})
-	// fmt.Println(string(privbyte))
 	if err := ioutil.WriteFile("private.pem", privbyte, os.ModePerm); err != nil {
 		panic(err)
 	}
@@ -79,7 +125,6 @@ func main() {
 		derPublicKey = x509.MarshalPKCS1PublicKey(rsaPublicKeyPointer)
 	}
 	pubbyte := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: derPublicKey})
-	// fmt.Println(string(pubbyte))
 	if err := ioutil.WriteFile("public.pem", pubbyte, os.ModePerm); err != nil {
 		panic(err)
 	}
@@ -88,32 +133,18 @@ func main() {
 	hasher.Write([]byte(header_str))
 	tokenHash := hasher.Sum(nil)
 
-	//signed_byte, errors := rsaPrivateKey.Sign(ran, []byte(header_str), crypto.SHA256)
-	signed_byte, errors := rsa.SignPSS(ran, rsaPrivateKey, crypto.SHA256, tokenHash, nil)
-	fmt.Errorf("%s\n", errors)
+	signed_byte, _ := rsa.SignPSS(ran, rsaPrivateKey, crypto.SHA256, tokenHash, nil)
+
 	encoded_str := base64.StdEncoding.EncodeToString(signed_byte)
 
 	signed_header := fmt.Sprintf("keyId=\"%s\",headers=\"(request-target) host date\",signature=\"%s\"", "https://actub.hatawaku.xyz/users/test#main-key", encoded_str)
 	req.Header.Set("Signature", signed_header)
-	t_dump, _ := httputil.DumpRequestOut(req, true)
-	fmt.Println([]byte(header_str))
-	fmt.Println(signed_byte)
-	fmt.Println(encoded_str)
-	fmt.Printf("%s", t_dump)
-	//Signature: keyId="https://actub.hatawaku.xyz/users/test#main-key",headers="(request-target) host date",signature="Y2FiYW...IxNGRiZDk4ZA=="
 	router := gin.Default()
 
 	router.GET("/users/test", func(ctx *gin.Context) {
-		file, err := ioutil.ReadFile("src/static/test.json")
-		accept := ctx.GetHeader("accept")
-		if accept == "application/activity+json" {
-			var response interface{}
-			if err == nil {
-				json.Unmarshal(file, &response)
-				fmt.Println(response)
-			}
-			ctx.Data(200, "application/activity+json", file)
-		}
+		person_json := newUserStruct("test")
+		person_json.Summary = "Hi,This is my summary."
+		ctx.JSON(200, person_json)
 	})
 
 	router.GET("/.well-known/host-meta", func(ctx *gin.Context) {
@@ -121,6 +152,39 @@ func main() {
 		if err == nil {
 			ctx.Data(200, "application/xml", file)
 		}
+	})
+	type Link struct {
+		Rel  string `json:"rel"`
+		Type string `json:"type"`
+		Href string `json:"href"`
+	}
+	type Finger struct {
+		Subject string   `json:"subject"`
+		Aliases []string `json:"aliases"`
+		Links   []Link   `json:"links"`
+	}
+	router.GET("/.well-known/webfinger", func(ctx *gin.Context) {
+		resource := ctx.Query("resource")
+		splitedText := strings.Split(resource, "@")
+		acct := strings.Split(splitedText[0], ":")
+		userId := acct[1]
+
+		webDomain := "actub.hatawaku.xyz"
+		siteURL := "https://" + webDomain + "/"
+		userURL := siteURL + "users/" + userId
+		subject := "acct:" + userId + "@" + webDomain
+		webfingerLink := Link{"http://webfinger.net/rel/profile-page", "text/html", userURL}
+		activitypubLink := Link{"self", "application/activity+json", userURL}
+		activityStreamLink := Link{"self", "application/ld+json; profile=\"https://www.w3.org/ns/activitystreams\"", userURL}
+		ostatusLink := Link{}
+		ostatusLink.Rel = "http://ostatus.org/schema/1.0/subscribe"
+		links := []Link{webfingerLink, activitypubLink, activityStreamLink, ostatusLink}
+		webfingerJson := Finger{}
+		webfingerJson.Subject = subject
+		webfingerJson.Aliases = []string{userURL}
+		webfingerJson.Links = links
+		ctx.JSON(200, webfingerJson)
+
 	})
 
 	router.POST("/users/inbox", func(ctx *gin.Context) {
@@ -131,11 +195,15 @@ func main() {
 			var followJSON interface{}
 			if err := ctx.ShouldBindJSON(&followJSON); err != nil {
 				acceptJSON := accept{Context: "https://www.w3.org/ns/activitystreams", Type: "Accept", Actor: "https://actub.hatawaku.xyz/users/test", Object: followJSON}
-
+				actor := followJSON.(followed).Acotr
+				signedReq := newSignRequest("mstdn.jp", "post", actor, acceptJSON)
+				client := &http.Client{}
+				resp, _ := client.Do(signedReq)
+				fmt.Println(resp)
 				ctx.JSON(200, acceptJSON)
 			}
 		}
 	})
 
-	//router.Run(":5000")
+	router.Run(":5000")
 }
