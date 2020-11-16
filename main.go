@@ -39,12 +39,12 @@ type accept struct {
 }
 
 type followed struct {
-	Acotr string `json:"actor"`
+	Actor string `json:"actor"`
 }
 
 func newSignRequest(host, verb, path string, body interface{}) *http.Request {
 	bodyJSON, _ := json.Marshal(body)
-	req, _ := http.NewRequest(strings.ToUpper(verb), "https://"+host+path, bytes.NewBuffer(bodyJSON))
+	req, _ := http.NewRequest(strings.ToUpper(verb), path, bytes.NewBuffer(bodyJSON))
 	date := time.Now().Format("02 Jan 2006 15:04:05")
 	header_str := fmt.Sprintf("(request-target): %s %s\nhost: %s\ndate: %s GMT", verb, path, host, date)
 	ran := rand.Reader
@@ -58,6 +58,7 @@ func newSignRequest(host, verb, path string, body interface{}) *http.Request {
 
 	signed_header := fmt.Sprintf("keyId=\"%s\",headers=\"(request-target) host date\",signature=\"%s\"", "https://actub.hatawaku.xyz/users/test#main-key", encoded_str)
 	req.Header.Set("Signature", signed_header)
+	req.Header.Set("Content-Type", "application/activity+json")
 	return req
 }
 
@@ -187,21 +188,24 @@ func main() {
 
 	})
 
-	router.POST("/users/inbox", func(ctx *gin.Context) {
-		acceptType := ctx.GetHeader("accept")
-		if acceptType != "application/activity+json" {
-
+	router.POST("/users/test/inbox", func(ctx *gin.Context) {
+		contentType := ctx.GetHeader("Content-Type")
+		fmt.Printf("contentType:%s\n", contentType)
+		var followJSON followed
+		if err := ctx.ShouldBindJSON(&followJSON); err != nil {
+			fmt.Println("errorNAU")
+			fmt.Errorf("%s\n", err)
 		} else {
-			var followJSON interface{}
-			if err := ctx.ShouldBindJSON(&followJSON); err != nil {
-				acceptJSON := accept{Context: "https://www.w3.org/ns/activitystreams", Type: "Accept", Actor: "https://actub.hatawaku.xyz/users/test", Object: followJSON}
-				actor := followJSON.(followed).Acotr
-				signedReq := newSignRequest("mstdn.jp", "post", actor, acceptJSON)
-				client := &http.Client{}
-				resp, _ := client.Do(signedReq)
-				fmt.Println(resp)
-				ctx.JSON(200, acceptJSON)
-			}
+
+			fmt.Println("OKNAU")
+			acceptJSON := accept{Context: "https://www.w3.org/ns/activitystreams", Type: "Accept", Actor: "https://actub.hatawaku.xyz/users/test", Object: followJSON}
+			actor := followJSON.Actor
+			fmt.Printf("actor:%s\n", actor)
+			signedReq := newSignRequest("mstdn.jp", "post", actor, acceptJSON)
+			client := &http.Client{}
+			resp, _ := client.Do(signedReq)
+			fmt.Println(resp)
+			ctx.JSON(202, acceptJSON)
 		}
 	})
 
