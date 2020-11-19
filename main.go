@@ -204,8 +204,9 @@ func main() {
 			signedReq := newSignRequest("mstdn.jp", "post", actor, acceptJSON)
 			client := &http.Client{}
 			resp, _ := client.Do(signedReq)
-			fmt.Println(resp)
-			ctx.JSON(202, acceptJSON)
+			fmt.Printf("reponse:%s\n", resp)
+			// ctx.JSON(202, acceptJSON)
+			ctx.Status(202)
 		}
 	})
 
