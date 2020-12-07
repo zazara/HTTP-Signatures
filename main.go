@@ -40,11 +40,12 @@ type accept struct {
 
 type followed struct {
 	Actor string `json:"actor"`
+	Type  string `json:"type`
 }
 
 func newSignRequest(host, verb, path string, body interface{}) *http.Request {
 	bodyJSON, _ := json.Marshal(body)
-	req, _ := http.NewRequest(strings.ToUpper(verb), path, bytes.NewBuffer(bodyJSON))
+	req, _ := http.NewRequest(strings.ToUpper(verb), "https://imastodon.net/users/Teru/inbox", bytes.NewBuffer(bodyJSON))
 	date := time.Now().Format("02 Jan 2006 15:04:05")
 	header_str := fmt.Sprintf("(request-target): %s %s\nhost: %s\ndate: %s GMT", verb, path, host, date)
 	ran := rand.Reader
@@ -74,15 +75,16 @@ type publicKey struct {
 }
 
 type user struct {
-	Context           string `json:"@context"`
-	Type              string `json:"type"`
-	Id                string `json:"id"`
-	Name              string `json:"name"`
-	PreferredUsername string `json:"preferredUsername"`
-	Summary           string `json:"summary"`
-	Inbox             string `json:"inbox"`
-	Outbox            string `json:"outbox"`
-	Icon              icon   `json:"icon"`
+	Context           string    `json:"@context"`
+	Type              string    `json:"type"`
+	Id                string    `json:"id"`
+	Name              string    `json:"name"`
+	PreferredUsername string    `json:"preferredUsername"`
+	Summary           string    `json:"summary"`
+	Inbox             string    `json:"inbox"`
+	Outbox            string    `json:"outbox"`
+	Icon              icon      `json:"icon"`
+	PublicKey         publicKey `json:"publicKey"`
 }
 
 func newUserStruct(userId string) user {
@@ -99,6 +101,10 @@ func newUserStruct(userId string) user {
 	newUser.Outbox = userURL + "/outbox"
 	newIcon := icon{Type: "Image", URL: "https://actub.hatawaku.xyz/media/test"}
 	newUser.Icon = newIcon
+	newPublicKey := publicKey{}
+	newPublicKey.Id = siteURL + "users/" + userId + "#main-key"
+	newPublicKey.Owner = siteURL + "users/" + userId
+	newUser.PublicKey = newPublicKey
 	return newUser
 }
 
@@ -201,12 +207,14 @@ func main() {
 			acceptJSON := accept{Context: "https://www.w3.org/ns/activitystreams", Type: "Accept", Actor: "https://actub.hatawaku.xyz/users/test", Object: followJSON}
 			actor := followJSON.Actor
 			fmt.Printf("actor:%s\n", actor)
+			fmt.Printf("type:%s\n", followJSON.Type)
 			signedReq := newSignRequest("mstdn.jp", "post", actor, acceptJSON)
 			client := &http.Client{}
 			resp, _ := client.Do(signedReq)
 			fmt.Printf("reponse:%s\n", resp)
 			// ctx.JSON(202, acceptJSON)
 			ctx.Status(202)
+			ctx.Data(202, "application/activity+json", []byte(""))
 		}
 	})
 

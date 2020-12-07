@@ -1,0 +1,9 @@
+{"@context":"https://www.w3.org/ns/activitystreams",
+    "type":"Person",
+    "id":"https://actub.hatawaku.xyz/users/test",
+    "name":"test",
+    "preferredUsername":"test",
+    "summary":"Hi,This is my summary.",
+    "inbox":"https://actub.hatawaku.xyz/users/test/inbox",
+    "outbox":"https://actub.hatawaku.xyz/users/test/outbox",
+    "icon":{"type":"Image","url":"https://actub.hatawaku.xyz/media/test"}}

@@ -6,7 +6,7 @@
     "summary": "my simple activitypub", 
     "inbox": "https://actub.hatawaku.xyz/inbox", 
     "outbox": "https://actub.hatawaku.xyz/outbox", 
-    "url": "https://actub.hatawaku.xyz/test",
+    "url": "https://actub.hatawaku.xyz/users/test",
     "icon": { "type": "Image", "mediaType": "image/png", "url": "https://actub.hatawaku.xyz/icon.ong" } ,
     "publicKey":{
         "id":"https://pleroma.soykaf.com/users/test#main-key",
