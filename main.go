@@ -32,10 +32,11 @@ type keyPair struct {
 }
 
 type accept struct {
-	Context string      `json:"@context"`
-	Type    string      `json:"type"`
-	Actor   string      `json:"actor"`
-	Object  interface{} `json:"object"`
+	Context   string      `json:"@context"`
+	Type      string      `json:"type"`
+	Actor     string      `json:"actor"`
+	Object    interface{} `json:"object"`
+	PublicKey publicKey   `json:"publicKey`
 }
 
 type followed struct {
@@ -45,15 +46,17 @@ type followed struct {
 
 func newSignRequest(host, verb, path string, body interface{}) *http.Request {
 	bodyJSON, _ := json.Marshal(body)
-	req, _ := http.NewRequest(strings.ToUpper(verb), "https://imastodon.net/users/Teru/inbox", bytes.NewBuffer(bodyJSON))
+	req, _ := http.NewRequest(strings.ToUpper(verb), "https://imastodon.net/users/rest/inbox", bytes.NewBuffer(bodyJSON))
+	// req, _ := http.NewRequest(strings.ToUpper(verb), "http://checksig.hatawaku.xyz/users/test/inbox", bytes.NewBuffer(bodyJSON))
 	date := time.Now().Format("02 Jan 2006 15:04:05")
 	header_str := fmt.Sprintf("(request-target): %s %s\nhost: %s\ndate: %s GMT", verb, path, host, date)
 	ran := rand.Reader
-	rsaPrivateKey, _ := rsa.GenerateKey(ran, 2048)
+	block, _ := pem.Decode(readPem())
+	rsaPrivateKey, _ := x509.ParsePKCS8PrivateKey(block.Bytes)
 	hasher := sha256.New()
 	hasher.Write([]byte(header_str))
 	tokenHash := hasher.Sum(nil)
-	signed_byte, _ := rsa.SignPSS(ran, rsaPrivateKey, crypto.SHA256, tokenHash, nil)
+	signed_byte, _ := rsa.SignPSS(ran, rsaPrivateKey.(*rsa.PrivateKey), crypto.SHA256, tokenHash, nil)
 
 	encoded_str := base64.StdEncoding.EncodeToString(signed_byte)
 
@@ -108,39 +111,70 @@ func newUserStruct(userId string) user {
 	return newUser
 }
 
+func readPem() []byte {
+	f, err := os.Open("private.pem")
+	if err != nil {
+		fmt.Errorf("%s\n", err)
+		return nil
+	}
+	defer f.Close()
+
+	b, err := ioutil.ReadAll(f)
+	if err != nil {
+		fmt.Errorf("%s\n", err)
+		return nil
+	}
+	return b
+}
+
+func readPub() []byte {
+	f, err := os.Open("public.pem")
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+
+	b, err := ioutil.ReadAll(f)
+	return b
+}
+
 func main() {
-	url := "https://mstdn.jp"
+	url := "https://imastodon.net"
 	req, _ := http.NewRequest("POST", url, nil)
 	req.Header.Set("Authorization", "Bearer access-token")
-
-	host := "mstdn.jp"
+	/* */
+	host := "imastodon.net"
 	verb := "get"
-	path := "/users/lain/inbox"
+	path := "/users/rest/inbox"
 	date := time.Now().Format("02 Jan 2006 15:04:05")
 	header_str := fmt.Sprintf("(request-target): %s %s\nhost: %s\ndate: %s GMT", verb, path, host, date)
+	fmt.Println(header_str)
 	ran := rand.Reader
-	rsaPrivateKey, _ := rsa.GenerateKey(ran, 2048)
-	rsaPublicKey := rsaPrivateKey.Public()
-	derPrivateKey, _ := x509.MarshalPKCS8PrivateKey(rsaPrivateKey)
-	privbyte := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: derPrivateKey})
-	if err := ioutil.WriteFile("private.pem", privbyte, os.ModePerm); err != nil {
-		panic(err)
-	}
+	// rsaPrivateKey, _ := rsa.GenerateKey(ran, 2048)
+	// rsaPublicKey := rsaPrivateKey.Public()
+	// derPrivateKey, _ := x509.MarshalPKCS8PrivateKey(rsaPrivateKey)
+	// privbyte := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: derPrivateKey})
+	// if err := ioutil.WriteFile("private.pem", privbyte, os.ModePerm); err != nil {
+	// 	panic(err)
+	// }
 
-	var derPublicKey []byte
-	if rsaPublicKeyPointer, ok := rsaPublicKey.(*rsa.PublicKey); ok {
-		derPublicKey = x509.MarshalPKCS1PublicKey(rsaPublicKeyPointer)
-	}
-	pubbyte := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: derPublicKey})
-	if err := ioutil.WriteFile("public.pem", pubbyte, os.ModePerm); err != nil {
-		panic(err)
-	}
+	// var derPublicKey []byte
+	// if rsaPublicKeyPointer, ok := rsaPublicKey.(*rsa.PublicKey); ok {
+	// 	derPublicKey = x509.MarshalPKCS1PublicKey(rsaPublicKeyPointer)
+	// }
+	// pubbyte := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: derPublicKey})
+	// if err := ioutil.WriteFile("public.pem", pubbyte, os.ModePerm); err != nil {
+	// 	panic(err)
+	// }
 
 	hasher := sha256.New()
 	hasher.Write([]byte(header_str))
 	tokenHash := hasher.Sum(nil)
+	block, _ := pem.Decode(readPem())
+	rsaPrivateKey, _ := x509.ParsePKCS8PrivateKey(block.Bytes)
+	// rsaPublicKey = rsaPrivateKey.Public()
 
-	signed_byte, _ := rsa.SignPSS(ran, rsaPrivateKey, crypto.SHA256, tokenHash, nil)
+	signed_byte, _ := rsa.SignPSS(ran, rsaPrivateKey.(*rsa.PrivateKey), crypto.SHA256, tokenHash, nil)
 
 	encoded_str := base64.StdEncoding.EncodeToString(signed_byte)
 
@@ -148,9 +182,11 @@ func main() {
 	req.Header.Set("Signature", signed_header)
 	router := gin.Default()
 
+	/* router */
 	router.GET("/users/test", func(ctx *gin.Context) {
 		person_json := newUserStruct("test")
 		person_json.Summary = "Hi,This is my summary."
+		person_json.PublicKey.PublicKeyPem = string(readPub())
 		ctx.JSON(200, person_json)
 	})
 
@@ -204,11 +240,13 @@ func main() {
 		} else {
 
 			fmt.Println("OKNAU")
-			acceptJSON := accept{Context: "https://www.w3.org/ns/activitystreams", Type: "Accept", Actor: "https://actub.hatawaku.xyz/users/test", Object: followJSON}
+			pubkey := publicKey{Id: "https://actub.hatawaku.xyz/users/test#main-key", Owner: "https://actub.hatawaku.xyz/users/test", PublicKeyPem: string(readPub())}
+			acceptJSON := accept{Context: "https://www.w3.org/ns/activitystreams", Type: "Accept", Actor: "https://actub.hatawaku.xyz/users/test", Object: followJSON, PublicKey: pubkey}
 			actor := followJSON.Actor
 			fmt.Printf("actor:%s\n", actor)
 			fmt.Printf("type:%s\n", followJSON.Type)
-			signedReq := newSignRequest("mstdn.jp", "post", actor, acceptJSON)
+			// signedReq := newSignRequest("imastodon.net", "post", actor, acceptJSON)
+			signedReq := newSignRequest("checksig.hatawaku.xyz", "post", "users/test/inbox", acceptJSON)
 			client := &http.Client{}
 			resp, _ := client.Do(signedReq)
 			fmt.Printf("reponse:%s\n", resp)
