@@ -45,9 +45,9 @@ type followed struct {
 }
 
 func newSignRequest(host, verb, path string, body interface{}) *http.Request {
+	postUrl := "https://imastodon.net/users/rest/inbox"
 	bodyJSON, _ := json.Marshal(body)
-	req, _ := http.NewRequest(strings.ToUpper(verb), "https://imastodon.net/users/rest/inbox", bytes.NewBuffer(bodyJSON))
-	// req, _ := http.NewRequest(strings.ToUpper(verb), "http://checksig.hatawaku.xyz/users/test/inbox", bytes.NewBuffer(bodyJSON))
+	req, _ := http.NewRequest(strings.ToUpper(verb), postUrl, bytes.NewBuffer(bodyJSON))
 	date := time.Now().Format("02 Jan 2006 15:04:05")
 	header_str := fmt.Sprintf("(request-target): %s %s\nhost: %s\ndate: %s GMT", verb, path, host, date)
 	ran := rand.Reader
@@ -78,7 +78,7 @@ type publicKey struct {
 }
 
 type user struct {
-	Context           string    `json:"@context"`
+	Context           []string  `json:"@context"`
 	Type              string    `json:"type"`
 	Id                string    `json:"id"`
 	Name              string    `json:"name"`
@@ -90,11 +90,29 @@ type user struct {
 	PublicKey         publicKey `json:"publicKey"`
 }
 
+type reply struct {
+	Type         string `json:"type"`
+	Id           string `json:"id"`
+	Published    string `json:"published"`
+	AttributedTo string `json:"attributedTo"`
+	InReplyTo    string `json:"inReplyTo"`
+	Content      string `json:"content"`
+	To           string `json:"to"`
+}
+
+type create struct {
+	Context string `json:"@context"`
+	Type    string `json:"type"`
+	Id      string `json:"id"`
+	Actor   string `json:"actor"`
+	Object  reply  `json:"object"`
+}
+
 func newUserStruct(userId string) user {
 	siteURL := "https://actub.hatawaku.xyz/"
 	userURL := siteURL + "users/" + userId
 	newUser := user{}
-	newUser.Context = "https://www.w3.org/ns/activitystreams"
+	newUser.Context = []string{"https://www.w3.org/ns/activitystreams", "https://w3id.org/security/v1"}
 	newUser.Type = "Person"
 	newUser.Id = userURL
 	newUser.Name = userId
@@ -139,47 +157,6 @@ func readPub() []byte {
 }
 
 func main() {
-	url := "https://imastodon.net"
-	req, _ := http.NewRequest("POST", url, nil)
-	req.Header.Set("Authorization", "Bearer access-token")
-	/* */
-	host := "imastodon.net"
-	verb := "get"
-	path := "/users/rest/inbox"
-	date := time.Now().Format("02 Jan 2006 15:04:05")
-	header_str := fmt.Sprintf("(request-target): %s %s\nhost: %s\ndate: %s GMT", verb, path, host, date)
-	fmt.Println(header_str)
-	ran := rand.Reader
-	// rsaPrivateKey, _ := rsa.GenerateKey(ran, 2048)
-	// rsaPublicKey := rsaPrivateKey.Public()
-	// derPrivateKey, _ := x509.MarshalPKCS8PrivateKey(rsaPrivateKey)
-	// privbyte := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: derPrivateKey})
-	// if err := ioutil.WriteFile("private.pem", privbyte, os.ModePerm); err != nil {
-	// 	panic(err)
-	// }
-
-	// var derPublicKey []byte
-	// if rsaPublicKeyPointer, ok := rsaPublicKey.(*rsa.PublicKey); ok {
-	// 	derPublicKey = x509.MarshalPKCS1PublicKey(rsaPublicKeyPointer)
-	// }
-	// pubbyte := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: derPublicKey})
-	// if err := ioutil.WriteFile("public.pem", pubbyte, os.ModePerm); err != nil {
-	// 	panic(err)
-	// }
-
-	hasher := sha256.New()
-	hasher.Write([]byte(header_str))
-	tokenHash := hasher.Sum(nil)
-	block, _ := pem.Decode(readPem())
-	rsaPrivateKey, _ := x509.ParsePKCS8PrivateKey(block.Bytes)
-	// rsaPublicKey = rsaPrivateKey.Public()
-
-	signed_byte, _ := rsa.SignPSS(ran, rsaPrivateKey.(*rsa.PrivateKey), crypto.SHA256, tokenHash, nil)
-
-	encoded_str := base64.StdEncoding.EncodeToString(signed_byte)
-
-	signed_header := fmt.Sprintf("keyId=\"%s\",headers=\"(request-target) host date\",signature=\"%s\"", "https://actub.hatawaku.xyz/users/test#main-key", encoded_str)
-	req.Header.Set("Signature", signed_header)
 	router := gin.Default()
 
 	/* router */
@@ -231,29 +208,47 @@ func main() {
 	})
 
 	router.POST("/users/test/inbox", func(ctx *gin.Context) {
-		contentType := ctx.GetHeader("Content-Type")
-		fmt.Printf("contentType:%s\n", contentType)
-		var followJSON followed
-		if err := ctx.ShouldBindJSON(&followJSON); err != nil {
-			fmt.Println("errorNAU")
-			fmt.Errorf("%s\n", err)
-		} else {
+		f, _ := os.Open("create.json")
+		defer f.Close()
 
-			fmt.Println("OKNAU")
-			pubkey := publicKey{Id: "https://actub.hatawaku.xyz/users/test#main-key", Owner: "https://actub.hatawaku.xyz/users/test", PublicKeyPem: string(readPub())}
-			acceptJSON := accept{Context: "https://www.w3.org/ns/activitystreams", Type: "Accept", Actor: "https://actub.hatawaku.xyz/users/test", Object: followJSON, PublicKey: pubkey}
-			actor := followJSON.Actor
-			fmt.Printf("actor:%s\n", actor)
-			fmt.Printf("type:%s\n", followJSON.Type)
-			// signedReq := newSignRequest("imastodon.net", "post", actor, acceptJSON)
-			signedReq := newSignRequest("checksig.hatawaku.xyz", "post", "users/test/inbox", acceptJSON)
-			client := &http.Client{}
-			resp, _ := client.Do(signedReq)
-			fmt.Printf("reponse:%s\n", resp)
-			// ctx.JSON(202, acceptJSON)
-			ctx.Status(202)
-			ctx.Data(202, "application/activity+json", []byte(""))
+		document, _ := ioutil.ReadAll(f)
+		date := time.Now().Format("Mon, 02 Jan 2006 15:04:05 GMT")
+		block, _ := pem.Decode(readPem())
+		keypair, _ := x509.ParsePKCS1PrivateKey(block.Bytes)
+		signed_string := fmt.Sprintf("(request-target): post /inbox\nhost: imastodon.net\ndate: %s", date)
+		fmt.Println(signed_string)
+		hashedp := sha256.Sum256([]byte(signed_string))
+		signature, _ := rsa.SignPKCS1v15(nil, keypair, crypto.SHA256, hashedp[:])
+		header := `keyId="https://actub.hatawaku.xyz/users/test#main-key",headers="(request-target) host date",signature="` + base64.StdEncoding.EncodeToString(signature) + `"`
+		req, _ := http.NewRequest("POST", "https://imastodon.net/inbox", bytes.NewBuffer(document))
+		fmt.Println(header)
+		fmt.Println(date)
+		hashed := sha256.Sum256([]byte(signed_string))
+		a, _ := base64.StdEncoding.DecodeString(base64.StdEncoding.EncodeToString(signature))
+		erara := rsa.VerifyPKCS1v15(&keypair.PublicKey, crypto.SHA256, hashed[:], a)
+		if erara != nil {
+			fmt.Println(erara)
+		} else {
+			fmt.Println("verify")
 		}
+		req.Header.Set("Host", "imastodon.net")
+		req.Header.Set("Date", date)
+		req.Header.Set("Signature", header)
+		client := &http.Client{}
+		resp, era := client.Do(req)
+		if era != nil {
+			fmt.Println("era")
+			fmt.Println(era)
+		} else {
+			defer resp.Body.Close()
+			b, err := ioutil.ReadAll(resp.Body)
+			if err == nil {
+				fmt.Println(string(b))
+			} else {
+				fmt.Print(err)
+			}
+		}
+		ctx.Status(202)
 	})
 
 	router.Run(":5000")
