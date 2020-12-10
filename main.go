@@ -32,11 +32,11 @@ type keyPair struct {
 }
 
 type accept struct {
-	Context   string      `json:"@context"`
+	Context   []string    `json:"@context"`
 	Type      string      `json:"type"`
 	Actor     string      `json:"actor"`
 	Object    interface{} `json:"object"`
-	PublicKey publicKey   `json:"publicKey`
+	PublicKey publicKey   `json:"publicKey"`
 }
 
 type followed struct {
@@ -204,14 +204,57 @@ func main() {
 		webfingerJson.Aliases = []string{userURL}
 		webfingerJson.Links = links
 		ctx.JSON(200, webfingerJson)
-
 	})
 
 	router.POST("/users/test/inbox", func(ctx *gin.Context) {
-		f, _ := os.Open("create.json")
-		defer f.Close()
+		// f, _ := os.Open("create.json")
+		// defer f.Close()
 
-		document, _ := ioutil.ReadAll(f)
+		// document, _ := ioutil.ReadAll(f)
+		// date := time.Now().Format("Mon, 02 Jan 2006 15:04:05 GMT")
+		// block, _ := pem.Decode(readPem())
+		// keypair, _ := x509.ParsePKCS1PrivateKey(block.Bytes)
+		// signed_string := fmt.Sprintf("(request-target): post /inbox\nhost: imastodon.net\ndate: %s", date)
+		// fmt.Println(signed_string)
+		// hashedp := sha256.Sum256([]byte(signed_string))
+		// signature, _ := rsa.SignPKCS1v15(nil, keypair, crypto.SHA256, hashedp[:])
+		// header := `keyId="https://actub.hatawaku.xyz/users/test#main-key",headers="(request-target) host date",signature="` + base64.StdEncoding.EncodeToString(signature) + `"`
+		// req, _ := http.NewRequest("POST", "https://imastodon.net/inbox", bytes.NewBuffer(document))
+		// fmt.Println(header)
+		// fmt.Println(date)
+		// hashed := sha256.Sum256([]byte(signed_string))
+		// a, _ := base64.StdEncoding.DecodeString(base64.StdEncoding.EncodeToString(signature))
+		// erara := rsa.VerifyPKCS1v15(&keypair.PublicKey, crypto.SHA256, hashed[:], a)
+		// if erara != nil {
+		// 	fmt.Println(erara)
+		// } else {
+		// 	fmt.Println("verify")
+		// }
+		// req.Header.Set("Host", "imastodon.net")
+		// req.Header.Set("Date", date)
+		// req.Header.Set("Signature", header)
+		// client := &http.Client{}
+		// resp, era := client.Do(req)
+		// if era != nil {
+		// 	fmt.Println("era")
+		// 	fmt.Println(era)
+		// } else {
+		// 	defer resp.Body.Close()
+		// 	b, err := ioutil.ReadAll(resp.Body)
+		// 	if err == nil {
+		// 		fmt.Println(string(b))
+		// 	} else {
+		// 		fmt.Print(err)
+		// 	}
+		// }
+
+		document := accept{}
+		document.Context = []string{"https://www.w3.org/ns/activitystreams", "https://w3id.org/security/v1"}
+		document.Type = "Accept"
+		document.Actor = "https://actub.hatawaku.xyz/users/test"
+		if err := ctx.ShouldBindJSON(&document.Object); err != nil {
+			fmt.Println(err)
+		}
 		date := time.Now().Format("Mon, 02 Jan 2006 15:04:05 GMT")
 		block, _ := pem.Decode(readPem())
 		keypair, _ := x509.ParsePKCS1PrivateKey(block.Bytes)
@@ -220,17 +263,8 @@ func main() {
 		hashedp := sha256.Sum256([]byte(signed_string))
 		signature, _ := rsa.SignPKCS1v15(nil, keypair, crypto.SHA256, hashedp[:])
 		header := `keyId="https://actub.hatawaku.xyz/users/test#main-key",headers="(request-target) host date",signature="` + base64.StdEncoding.EncodeToString(signature) + `"`
-		req, _ := http.NewRequest("POST", "https://imastodon.net/inbox", bytes.NewBuffer(document))
-		fmt.Println(header)
-		fmt.Println(date)
-		hashed := sha256.Sum256([]byte(signed_string))
-		a, _ := base64.StdEncoding.DecodeString(base64.StdEncoding.EncodeToString(signature))
-		erara := rsa.VerifyPKCS1v15(&keypair.PublicKey, crypto.SHA256, hashed[:], a)
-		if erara != nil {
-			fmt.Println(erara)
-		} else {
-			fmt.Println("verify")
-		}
+		json_doc, _ := json.Marshal(document)
+		req, _ := http.NewRequest("POST", "https://imastodon.net/inbox", bytes.NewBuffer(json_doc))
 		req.Header.Set("Host", "imastodon.net")
 		req.Header.Set("Date", date)
 		req.Header.Set("Signature", header)
@@ -248,6 +282,7 @@ func main() {
 				fmt.Print(err)
 			}
 		}
+		fmt.Println(document)
 		ctx.Status(202)
 	})
 
