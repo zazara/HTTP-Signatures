@@ -3,12 +3,10 @@ package main
 import (
 	"bytes"
 	"crypto"
-	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
-	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"io/ioutil"
@@ -42,28 +40,6 @@ type accept struct {
 type followed struct {
 	Actor string `json:"actor"`
 	Type  string `json:"type`
-}
-
-func newSignRequest(host, verb, path string, body interface{}) *http.Request {
-	postUrl := "https://imastodon.net/users/rest/inbox"
-	bodyJSON, _ := json.Marshal(body)
-	req, _ := http.NewRequest(strings.ToUpper(verb), postUrl, bytes.NewBuffer(bodyJSON))
-	date := time.Now().Format("02 Jan 2006 15:04:05")
-	header_str := fmt.Sprintf("(request-target): %s %s\nhost: %s\ndate: %s GMT", verb, path, host, date)
-	ran := rand.Reader
-	block, _ := pem.Decode(readPem())
-	rsaPrivateKey, _ := x509.ParsePKCS8PrivateKey(block.Bytes)
-	hasher := sha256.New()
-	hasher.Write([]byte(header_str))
-	tokenHash := hasher.Sum(nil)
-	signed_byte, _ := rsa.SignPSS(ran, rsaPrivateKey.(*rsa.PrivateKey), crypto.SHA256, tokenHash, nil)
-
-	encoded_str := base64.StdEncoding.EncodeToString(signed_byte)
-
-	signed_header := fmt.Sprintf("keyId=\"%s\",headers=\"(request-target) host date\",signature=\"%s\"", "https://actub.hatawaku.xyz/users/test#main-key", encoded_str)
-	req.Header.Set("Signature", signed_header)
-	req.Header.Set("Content-Type", "application/activity+json")
-	return req
 }
 
 type icon struct {
@@ -158,6 +134,46 @@ func readPub() []byte {
 
 func main() {
 	router := gin.Default()
+	f, _ := os.Open("create.json")
+	defer f.Close()
+
+	document, _ := ioutil.ReadAll(f)
+	date := time.Now().Format("Mon, 02 Jan 2006 15:04:05 GMT")
+	block, _ := pem.Decode(readPem())
+	keypair, _ := x509.ParsePKCS1PrivateKey(block.Bytes)
+	signed_string := fmt.Sprintf("(request-target): post /inbox\nhost: mstdn.jp\ndate: %s", date)
+	fmt.Println(signed_string)
+	hashedp := sha256.Sum256([]byte(signed_string))
+	signature, _ := rsa.SignPKCS1v15(nil, keypair, crypto.SHA256, hashedp[:])
+	header := `keyId="https://actub.hatawaku.xyz/users/test#main-key",headers="(request-target) host date",signature="` + base64.StdEncoding.EncodeToString(signature) + `"`
+	req, _ := http.NewRequest("POST", "https://masdn.jp/inbox", bytes.NewBuffer(document))
+	fmt.Println(header)
+	fmt.Println(date)
+	hashed := sha256.Sum256([]byte(signed_string))
+	a, _ := base64.StdEncoding.DecodeString(base64.StdEncoding.EncodeToString(signature))
+	erara := rsa.VerifyPKCS1v15(&keypair.PublicKey, crypto.SHA256, hashed[:], a)
+	if erara != nil {
+		fmt.Println(erara)
+	} else {
+		fmt.Println("verify")
+	}
+	req.Header.Set("Host", "mstdn.jp")
+	req.Header.Set("Date", date)
+	req.Header.Set("Signature", header)
+	client := &http.Client{}
+	resp, era := client.Do(req)
+	if era != nil {
+		fmt.Println("era")
+		fmt.Println(era)
+	} else {
+		defer resp.Body.Close()
+		b, err := ioutil.ReadAll(resp.Body)
+		if err == nil {
+			fmt.Println(string(b))
+		} else {
+			fmt.Print(err)
+		}
+	}
 
 	/* router */
 	router.GET("/users/test", func(ctx *gin.Context) {
@@ -207,82 +223,6 @@ func main() {
 	})
 
 	router.POST("/users/test/inbox", func(ctx *gin.Context) {
-		// f, _ := os.Open("create.json")
-		// defer f.Close()
-
-		// document, _ := ioutil.ReadAll(f)
-		// date := time.Now().Format("Mon, 02 Jan 2006 15:04:05 GMT")
-		// block, _ := pem.Decode(readPem())
-		// keypair, _ := x509.ParsePKCS1PrivateKey(block.Bytes)
-		// signed_string := fmt.Sprintf("(request-target): post /inbox\nhost: imastodon.net\ndate: %s", date)
-		// fmt.Println(signed_string)
-		// hashedp := sha256.Sum256([]byte(signed_string))
-		// signature, _ := rsa.SignPKCS1v15(nil, keypair, crypto.SHA256, hashedp[:])
-		// header := `keyId="https://actub.hatawaku.xyz/users/test#main-key",headers="(request-target) host date",signature="` + base64.StdEncoding.EncodeToString(signature) + `"`
-		// req, _ := http.NewRequest("POST", "https://imastodon.net/inbox", bytes.NewBuffer(document))
-		// fmt.Println(header)
-		// fmt.Println(date)
-		// hashed := sha256.Sum256([]byte(signed_string))
-		// a, _ := base64.StdEncoding.DecodeString(base64.StdEncoding.EncodeToString(signature))
-		// erara := rsa.VerifyPKCS1v15(&keypair.PublicKey, crypto.SHA256, hashed[:], a)
-		// if erara != nil {
-		// 	fmt.Println(erara)
-		// } else {
-		// 	fmt.Println("verify")
-		// }
-		// req.Header.Set("Host", "imastodon.net")
-		// req.Header.Set("Date", date)
-		// req.Header.Set("Signature", header)
-		// client := &http.Client{}
-		// resp, era := client.Do(req)
-		// if era != nil {
-		// 	fmt.Println("era")
-		// 	fmt.Println(era)
-		// } else {
-		// 	defer resp.Body.Close()
-		// 	b, err := ioutil.ReadAll(resp.Body)
-		// 	if err == nil {
-		// 		fmt.Println(string(b))
-		// 	} else {
-		// 		fmt.Print(err)
-		// 	}
-		// }
-
-		document := accept{}
-		document.Context = []string{"https://www.w3.org/ns/activitystreams", "https://w3id.org/security/v1"}
-		document.Type = "Accept"
-		document.Actor = "https://actub.hatawaku.xyz/users/test"
-		if err := ctx.ShouldBindJSON(&document.Object); err != nil {
-			fmt.Println(err)
-		}
-		date := time.Now().Format("Mon, 02 Jan 2006 15:04:05 GMT")
-		block, _ := pem.Decode(readPem())
-		keypair, _ := x509.ParsePKCS1PrivateKey(block.Bytes)
-		signed_string := fmt.Sprintf("(request-target): post /inbox\nhost: imastodon.net\ndate: %s", date)
-		fmt.Println(signed_string)
-		hashedp := sha256.Sum256([]byte(signed_string))
-		signature, _ := rsa.SignPKCS1v15(nil, keypair, crypto.SHA256, hashedp[:])
-		header := `keyId="https://actub.hatawaku.xyz/users/test#main-key",headers="(request-target) host date",signature="` + base64.StdEncoding.EncodeToString(signature) + `"`
-		json_doc, _ := json.Marshal(document)
-		req, _ := http.NewRequest("POST", "https://imastodon.net/inbox", bytes.NewBuffer(json_doc))
-		req.Header.Set("Host", "imastodon.net")
-		req.Header.Set("Date", date)
-		req.Header.Set("Signature", header)
-		client := &http.Client{}
-		resp, era := client.Do(req)
-		if era != nil {
-			fmt.Println("era")
-			fmt.Println(era)
-		} else {
-			defer resp.Body.Close()
-			b, err := ioutil.ReadAll(resp.Body)
-			if err == nil {
-				fmt.Println(string(b))
-			} else {
-				fmt.Print(err)
-			}
-		}
-		fmt.Println(document)
 		ctx.Status(202)
 	})
 

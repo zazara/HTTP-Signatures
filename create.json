@@ -1,17 +1,24 @@
 {
 	"@context": "https://www.w3.org/ns/activitystreams",
 
-	"id": "https://actub.hatawaku.xyz/create-hello-world",
+	"id": "https://actub.hatawaku.xyz/create-hello-world5",
 	"type": "Create",
 	"actor": "https://actub.hatawaku.xyz/users/test",
 
 	"object": {
-		"id": "https://actub.hatawaku.xyz/hello-world",
+		"id": "https://actub.hatawaku.xyz/hello-world5",
 		"type": "Note",
 		"published": "2018-06-23T17:17:11Z",
 		"attributedTo": "https://actub.hatawaku.xyz/users/test",
-		"inReplyTo": "https://imastodon.net/@rest/105344479809353878",
-		"content": "自分によしよし",
-		"to": "https://www.w3.org/ns/activitystreams#Public"
+		
+		"content": "ニコポン",
+		"to": "https://www.w3.org/ns/activitystreams#Public",
+		"attachment": [
+			{
+			  "type": "Image",
+			  "mediaType": "image/png",
+			  "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3c/Satellite_View_of_Japan_1999.jpg/800px-Satellite_View_of_Japan_1999.jpg"
+			}
+		]
 	}
 }
